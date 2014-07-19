@@ -79,7 +79,7 @@ const TTEntry* TranspositionTable::probe(const Key key) const {
           return tte;
       }
 
-  return NULL;
+  return nullptr;
 }
 
 

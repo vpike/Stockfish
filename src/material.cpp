@@ -141,7 +141,7 @@ Entry* probe(const Position& pos, Table& entries, Endgames& endgames) {
   // Let's look if we have a specialized evaluation function for this particular
   // material configuration. Firstly we look for a fixed configuration one, then
   // for a generic one if the previous search failed.
-  if (endgames.probe(key, e->evaluationFunction))
+  if (endgames.probe(key, &e->evaluationFunction))
       return e;
 
   if (is_KXK<WHITE>(pos))
@@ -163,7 +163,7 @@ Entry* probe(const Position& pos, Table& entries, Endgames& endgames) {
   // scaling functions and we need to decide which one to use.
   EndgameBase<ScaleFactor>* sf;
 
-  if (endgames.probe(key, sf))
+  if (endgames.probe(key, &sf))
   {
       e->scalingFunction[sf->color()] = sf;
       return e;
