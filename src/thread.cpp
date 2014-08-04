@@ -33,26 +33,20 @@ extern void check_time();
 
 namespace {
 
- // start_routine() is the C function which is called when a new thread
- // is launched. It is a wrapper to the virtual function idle_loop().
-
- extern "C" { long start_routine(ThreadBase* th) { th->idle_loop(); return 0; } }
-
-
  // Helpers to launch a thread after creation and joining before delete. Must be
  // outside Thread c'tor and d'tor because the object will be fully initialized
  // when start_routine (and hence virtual idle_loop) is called and when joining.
 
  template<typename T> T* new_thread() {
    T* th = new T();
-   thread_create(th->handle, start_routine, th); // Will go to sleep
+   th->nativeThread = std::thread(&ThreadBase::idle_loop, th); // Will go to sleep
    return th;
  }
 
  void delete_thread(ThreadBase* th) {
    th->exit = true; // Search must be already finished
    th->notify_one();
-   thread_join(th->handle); // Wait for thread termination
+   th->nativeThread.join(); // Wait for thread termination
    delete th;
  }
 
@@ -63,9 +57,8 @@ namespace {
 
 void ThreadBase::notify_one() {
 
-  mutex.lock();
+  std::unique_lock<std::mutex>(this->mutex);
   sleepCondition.notify_one();
-  mutex.unlock();
 }
 
 
@@ -73,9 +66,8 @@ void ThreadBase::notify_one() {
 
 void ThreadBase::wait_for(volatile const bool& b) {
 
-  mutex.lock();
-  while (!b) sleepCondition.wait(mutex);
-  mutex.unlock();
+  std::unique_lock<std::mutex> lk(mutex);
+  sleepCondition.wait(lk, [&]{ return b; });
 }
 
 
@@ -86,8 +78,8 @@ Thread::Thread() /* : splitPoints() */ { // Value-initialization bug in MSVC
 
   searching = false;
   maxPly = splitPointsSize = 0;
-  activeSplitPoint = NULL;
-  activePosition = NULL;
+  activeSplitPoint = nullptr;
+  activePosition = nullptr;
   idx = Threads.size(); // Starts from 0
 }
 
@@ -134,12 +126,12 @@ void TimerThread::idle_loop() {
 
   while (!exit)
   {
-      mutex.lock();
+      std::unique_lock<std::mutex> lk(mutex);
 
       if (!exit)
-          sleepCondition.wait_for(mutex, run ? Resolution : INT_MAX);
+          sleepCondition.wait_for(lk, std::chrono::milliseconds(run ? Resolution : INT_MAX));
 
-      mutex.unlock();
+      lk.unlock();
 
       if (run)
           check_time();
@@ -154,17 +146,17 @@ void MainThread::idle_loop() {
 
   while (true)
   {
-      mutex.lock();
+      std::unique_lock<std::mutex> lk(mutex);
 
       thinking = false;
 
       while (!thinking && !exit)
       {
           Threads.sleepCondition.notify_one(); // Wake up the UI thread if needed
-          sleepCondition.wait(mutex);
+          sleepCondition.wait(lk);
       }
 
-      mutex.unlock();
+      lk.unlock();
 
       if (exit)
           return;
@@ -200,8 +192,8 @@ void ThreadPool::exit() {
 
   delete_thread(timer); // As first because check_time() accesses threads data
 
-  for (iterator it = begin(); it != end(); ++it)
-      delete_thread(*it);
+  for (Thread* th : *this)
+      delete_thread(th);
 }
 
 
@@ -238,11 +230,11 @@ void ThreadPool::read_uci_options() {
 
 Thread* ThreadPool::available_slave(const Thread* master) const {
 
-  for (const_iterator it = begin(); it != end(); ++it)
-      if ((*it)->available_to(master))
-          return *it;
+  for (Thread* th : *this)
+      if (th->available_to(master))
+          return th;
 
-  return NULL;
+  return nullptr;
 }
 
 
@@ -294,7 +286,7 @@ void Thread::split(Position& pos, const Stack* ss, Value alpha, Value beta, Valu
   sp.allSlavesSearching = true; // Must be set under lock protection
   ++splitPointsSize;
   activeSplitPoint = &sp;
-  activePosition = NULL;
+  activePosition = nullptr;
 
   for (Thread* slave; (slave = Threads.available_slave(this)) != NULL; )
   {
@@ -341,10 +333,8 @@ void Thread::split(Position& pos, const Stack* ss, Value alpha, Value beta, Valu
 
 void ThreadPool::wait_for_think_finished() {
 
-  MainThread* t = main();
-  t->mutex.lock();
-  while (t->thinking) sleepCondition.wait(t->mutex);
-  t->mutex.unlock();
+  std::unique_lock<std::mutex> lk(main()->mutex);
+  sleepCondition.wait(lk, [&]{ return !main()->thinking; });
 }
 
 
@@ -365,14 +355,14 @@ void ThreadPool::start_thinking(const Position& pos, const LimitsType& limits, S
   Limits = limits;
   if (states.get()) // If we don't set a new position, preserve current state
   {
-      SetupStates = states; // Ownership transfer here
+      SetupStates = std::move(states); // Ownership transfer here
       assert(!states.get());
   }
 
-  for (MoveList<LEGAL> it(pos); *it; ++it)
+  for (const ExtMove& ms : MoveList<LEGAL>(pos))
       if (   limits.searchmoves.empty()
-          || std::count(limits.searchmoves.begin(), limits.searchmoves.end(), *it))
-          RootMoves.push_back(RootMove(*it));
+          || std::count(limits.searchmoves.begin(), limits.searchmoves.end(), ms.move))
+          RootMoves.push_back(RootMove(ms.move));
 
   main()->thinking = true;
   main()->notify_one(); // Starts main thread
