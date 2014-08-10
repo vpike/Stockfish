@@ -165,7 +165,7 @@ public:
   bool is_draw() const;
 
   // Position consistency check, for debugging
-  bool pos_is_ok(int* step = NULL) const;
+  bool pos_is_ok(int* step = nullptr) const;
   void flip();
 
 private:

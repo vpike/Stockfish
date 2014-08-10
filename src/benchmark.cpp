@@ -33,7 +33,7 @@
 
 using namespace std;
 
-static const char* Defaults[] = {
+static const vector<string> Defaults = {
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
   "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 10",
   "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 11",
@@ -93,19 +93,19 @@ void benchmark(const Position& current, istream& is) {
   TT.clear();
 
   if (limitType == "time")
-      limits.movetime = 1000 * atoi(limit.c_str()); // movetime is in ms
+      limits.movetime = 1000 * stoi(limit); // movetime is in ms
 
   else if (limitType == "nodes")
-      limits.nodes = atoi(limit.c_str());
+      limits.nodes = stoi(limit);
 
   else if (limitType == "mate")
-      limits.mate = atoi(limit.c_str());
+      limits.mate = stoi(limit);
 
   else
-      limits.depth = atoi(limit.c_str());
+      limits.depth = stoi(limit);
 
   if (fenFile == "default")
-      fens.assign(Defaults, Defaults + 30);
+      fens = Defaults;
 
   else if (fenFile == "current")
       fens.push_back(current.fen());
@@ -113,7 +113,7 @@ void benchmark(const Position& current, istream& is) {
   else
   {
       string fen;
-      ifstream file(fenFile.c_str());
+      ifstream file(fenFile);
 
       if (!file.is_open())
       {

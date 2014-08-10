@@ -41,7 +41,7 @@ struct Entry {
   Score material_value() const { return make_score(value, value); }
   Score space_weight() const { return spaceWeight; }
   Phase game_phase() const { return gamePhase; }
-  bool specialized_eval_exists() const { return evaluationFunction != NULL; }
+  bool specialized_eval_exists() const { return evaluationFunction != nullptr; }
   Value evaluate(const Position& pos) const { return (*evaluationFunction)(pos); }
 
   // scale_factor takes a position and a color as input, and returns a scale factor

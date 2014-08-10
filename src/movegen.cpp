@@ -255,7 +255,7 @@ namespace {
 
   template<Color Us, GenType Type> FORCE_INLINE
   ExtMove* generate_all(const Position& pos, ExtMove* mlist, Bitboard target,
-                        const CheckInfo* ci = NULL) {
+                        const CheckInfo* ci = nullptr) {
 
     const bool Checks = Type == QUIET_CHECKS;
 
