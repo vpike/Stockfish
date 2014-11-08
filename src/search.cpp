@@ -408,11 +408,12 @@ namespace {
     Move ttMove, move, excludedMove, bestMove;
     Depth ext, newDepth, predictedDepth;
     Value bestValue, value, ttValue, eval, nullValue, futilityValue;
-    bool inCheck, givesCheck, pvMove, singularExtensionNode, improving;
-    bool captureOrPromotion, dangerous, doFullDepthSearch;
+    bool inCheck, givesCheck, pvMove, singularExtensionNode, nullExtensionNode;
+    bool captureOrPromotion, dangerous, doFullDepthSearch, improving;
     int moveCount, quietCount;
 
     // Step 1. Initialize node
+    nullExtensionNode = false;
     Thread* thisThread = pos.this_thread();
     inCheck = pos.checkers();
 
@@ -555,8 +556,9 @@ namespace {
         &&  pos.non_pawn_material(pos.side_to_move()))
         return eval - futility_margin(depth);
 
-    // Step 8. Null move search with verification search (is omitted in PV nodes)
-    if (   !PvNode
+    // Step 8. Null move search with verification search. In PV nodes is performed
+    // just as a part of 'null extension' detection.
+    if (  (!PvNode || depth >= 8 * ONE_PLY)
         && !ss->skipNullMove
         &&  depth >= 2 * ONE_PLY
         &&  eval >= beta
@@ -569,30 +571,45 @@ namespace {
         // Null move dynamic reduction based on depth and value
         Depth R = (3 + depth / 4 + std::min(int(eval - beta) / PawnValueMg, 3)) * ONE_PLY;
 
+        // In normal case detect fail-highs, for null extension detect fail-lows
+        Value threshold = PvNode ? alpha : beta;
+
         pos.do_null_move(st);
         (ss+1)->skipNullMove = true;
-        nullValue = depth-R < ONE_PLY ? -qsearch<NonPV, false>(pos, ss+1, -beta, -beta+1, DEPTH_ZERO)
-                                      : - search<NonPV, false>(pos, ss+1, -beta, -beta+1, depth-R, !cutNode);
+
+        if (!PvNode)
+        nullValue = depth-R < ONE_PLY ? -qsearch<NonPV, false>(pos, ss+1, -threshold, -threshold+1, DEPTH_ZERO)
+                                      : - search<NonPV, false>(pos, ss+1, -threshold, -threshold+1, depth-R, !cutNode);
+        else nullValue = threshold;
+
         (ss+1)->skipNullMove = false;
         pos.undo_null_move();
 
-        if (nullValue >= beta)
+        if ((nullValue >= threshold) == !PvNode) // Fail-high std, fail-low null extension
         {
             // Do not return unproven mate scores
-            if (nullValue >= VALUE_MATE_IN_MAX_PLY)
+            if (!PvNode && nullValue >= VALUE_MATE_IN_MAX_PLY)
                 nullValue = beta;
 
-            if (depth < 12 * ONE_PLY && abs(beta) < VALUE_KNOWN_WIN)
+            if (!PvNode && depth < 12 * ONE_PLY && abs(beta) < VALUE_KNOWN_WIN)
                 return nullValue;
 
             // Do verification search at high depths
             ss->skipNullMove = true;
-            Value v = depth-R < ONE_PLY ? qsearch<NonPV, false>(pos, ss, beta-1, beta, DEPTH_ZERO)
-                                        :  search<NonPV, false>(pos, ss, beta-1, beta, depth-R, false);
+            Value v = depth-R < ONE_PLY ? qsearch<NonPV, false>(pos, ss, threshold-1, threshold, DEPTH_ZERO)
+                                        :  search<NonPV, false>(pos, ss, threshold-1, threshold, depth-R, false);
             ss->skipNullMove = false;
 
             if (v >= beta)
-                return nullValue;
+            {
+                if (!PvNode)
+                    return nullValue;
+                else
+                    // If a null search fails low and instead a normal search fails
+                    // high then there is some 'tension' in the position and it is
+                    // worth to extend it.
+                    nullExtensionNode = true;
+            }
         }
     }
 
@@ -716,8 +733,11 @@ moves_loop: // When in check and at SpNode search starts from here
                  || type_of(move) != NORMAL
                  || pos.advanced_pawn_push(move);
 
-      // Step 12. Extend checks
+      // Step 12. Extend checks and null extensions in PV nodes
       if (givesCheck && pos.see_sign(move) >= VALUE_ZERO)
+          ext = ONE_PLY;
+
+      if (PvNode && nullExtensionNode && moveCount == 1)
           ext = ONE_PLY;
 
       // Singular extension search. If all moves but one fail low on a search of
