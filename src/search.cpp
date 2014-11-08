@@ -577,10 +577,8 @@ namespace {
         pos.do_null_move(st);
         (ss+1)->skipNullMove = true;
 
-        if (!PvNode)
         nullValue = depth-R < ONE_PLY ? -qsearch<NonPV, false>(pos, ss+1, -threshold, -threshold+1, DEPTH_ZERO)
                                       : - search<NonPV, false>(pos, ss+1, -threshold, -threshold+1, depth-R, !cutNode);
-        else nullValue = threshold;
 
         (ss+1)->skipNullMove = false;
         pos.undo_null_move();
