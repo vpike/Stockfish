@@ -572,7 +572,7 @@ namespace {
         Depth R = (3 + depth / 4 + std::min(int(eval - beta) / PawnValueMg, 3)) * ONE_PLY;
 
         // In normal case detect fail-highs, for null extension detect fail-lows
-        Value threshold = PvNode ? alpha : beta;
+        Value threshold = PvNode ? alpha - 100 : beta;
 
         pos.do_null_move(st);
         (ss+1)->skipNullMove = true;
