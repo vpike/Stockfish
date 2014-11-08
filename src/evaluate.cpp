@@ -501,26 +501,8 @@ namespace {
     const Color Them = (Us == WHITE ? BLACK : WHITE);
 
     enum { Protected_Minor, Protected_Major, Minor, Major };
-    Bitboard b, weakEnemies, protectedEnemies;
+    Bitboard b, weakEnemies;
     Score score = SCORE_ZERO;
-
-    // Enemies defended by a pawn and under our attack
-    protectedEnemies = (pos.pieces(Them) ^ pos.pieces(Them, PAWN))
-                       & ei.attackedBy[Them][PAWN]
-                       & (ei.attackedBy[Us][KNIGHT] | ei.attackedBy[Us][BISHOP] | ei.attackedBy[Us][ROOK]);
-
-    if (protectedEnemies)
-    {
-        // Enemies defended by a pawn and under our attack by a minor piece
-        b = protectedEnemies & (ei.attackedBy[Us][KNIGHT] | ei.attackedBy[Us][BISHOP]);
-        while (b)
-            score += Threat[Protected_Minor][type_of(pos.piece_on(pop_lsb(&b)))];
-
-        // Enemies defended by a pawn and under our attack by a ROOK
-        b = protectedEnemies & (ei.attackedBy[Us][ROOK]);
-        while (b)
-            score += Threat[Protected_Major][type_of(pos.piece_on(pop_lsb(&b)))];
-    }
 
     // Enemies not defended by a pawn and under our attack
     weakEnemies =   pos.pieces(Them)
