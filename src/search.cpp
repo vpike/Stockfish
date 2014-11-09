@@ -592,16 +592,13 @@ namespace {
             if (!PvNode && depth < 12 * ONE_PLY && abs(beta) < VALUE_KNOWN_WIN)
                 return nullValue;
 
-            // Restore threshold at alpha/beta for verification search
-            threshold = PvNode ? alpha : beta;
-
             // Do verification search at high depths
             ss->skipNullMove = true;
-            Value v = depth-R < ONE_PLY ? qsearch<NonPV, false>(pos, ss, threshold-1, threshold, DEPTH_ZERO)
-                                        :  search<NonPV, false>(pos, ss, threshold-1, threshold, depth-R, false);
+            Value v = depth-R < ONE_PLY ? qsearch<NonPV, false>(pos, ss, beta-1, beta, DEPTH_ZERO)
+                                        :  search<NonPV, false>(pos, ss, beta-1, beta, depth-R, false);
             ss->skipNullMove = false;
 
-            if (v >= threshold)
+            if (v >= beta)
             {
                 if (!PvNode)
                     return nullValue;
