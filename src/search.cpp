@@ -572,7 +572,7 @@ namespace {
         Depth R = (3 + depth / 4 + std::min(int(eval - beta) / PawnValueMg, 3)) * ONE_PLY;
 
         // In normal case detect fail-highs, for null extension detect fail-lows
-        Value threshold = PvNode ? alpha - 100 : beta;
+        Value threshold = PvNode ? alpha : beta;
 
         pos.do_null_move(st);
         (ss+1)->skipNullMove = true;
@@ -583,16 +583,28 @@ namespace {
         (ss+1)->skipNullMove = false;
         pos.undo_null_move();
 
-        if ((nullValue >= threshold) == !PvNode) // Fail-high std, fail-low null extension
+        // Normal null search cut-off for standard non-PV nodes at low depths
+        if (!PvNode && nullValue >= threshold)
         {
             // Do not return unproven mate scores
-            if (!PvNode && nullValue >= VALUE_MATE_IN_MAX_PLY)
+            if (nullValue >= VALUE_MATE_IN_MAX_PLY)
                 nullValue = beta;
 
-            if (!PvNode && depth < 12 * ONE_PLY && abs(beta) < VALUE_KNOWN_WIN)
+            if (depth < 12 * ONE_PLY && abs(beta) < VALUE_KNOWN_WIN)
                 return nullValue;
+        }
 
-            // Do verification search at high depths
+        // Verification search done for standard non-PV nodes at high depths and
+        // to detect a possible null extension after null search failed low.
+        if (   (!PvNode && nullValue >= threshold)
+            || (nullValue < threshold && (PvNode || depth >= 12 * ONE_PLY)))
+        {
+            if (!PvNode && nullValue < threshold)
+            {
+                R = depth / 2;
+                threshold = threshold + 200;
+            }
+
             ss->skipNullMove = true;
             Value v = depth-R < ONE_PLY ? qsearch<NonPV, false>(pos, ss, threshold-1, threshold, DEPTH_ZERO)
                                         :  search<NonPV, false>(pos, ss, threshold-1, threshold, depth-R, false);
@@ -600,13 +612,18 @@ namespace {
 
             if (v >= beta)
             {
-                if (!PvNode)
-                    return nullValue;
+                if (!PvNode && nullValue >= threshold)
+                    return nullValue; // Cut-off after verification search
+
                 else
+                {
+                    assert(nullValue < threshold);
+
                     // If a null search fails low and instead a normal search fails
                     // high then there is some 'tension' in the position and it is
                     // worth to extend it.
                     nullExtensionNode = true;
+                }
             }
         }
     }
@@ -735,7 +752,7 @@ moves_loop: // When in check and at SpNode search starts from here
       if (givesCheck && pos.see_sign(move) >= VALUE_ZERO)
           ext = ONE_PLY;
 
-      if (PvNode && nullExtensionNode && moveCount == 1)
+      if (moveCount == 1 && nullExtensionNode)
           ext = ONE_PLY;
 
       // Singular extension search. If all moves but one fail low on a search of
