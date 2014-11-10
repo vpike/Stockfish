@@ -571,7 +571,7 @@ namespace {
         Depth R = (3 + depth / 4 + std::min(int(eval - beta) / PawnValueMg, 3)) * ONE_PLY;
 
         // In normal case detect fail-highs, for null extension detect fail-lows
-        Value threshold = PvNode ? alpha : beta;
+        Value threshold = PvNode ? alpha - 100 : beta;
 
         pos.do_null_move(st);
         (ss+1)->skipNullMove = true;
@@ -579,16 +579,21 @@ namespace {
         nullValue = depth-R < ONE_PLY ? -qsearch<NonPV, false>(pos, ss+1, -threshold, -threshold+1, DEPTH_ZERO)
                                       : - search<NonPV, false>(pos, ss+1, -threshold, -threshold+1, depth-R, !cutNode);
 
+        // If a null search fails very low in a PvNode and is not due to a
+        // hanging piece then position is complex and deserves an extension
+        if (PvNode && nullValue < threshold)
+            nullExtensionNode = (ss+1)->currentMove && !pos.capture_or_promotion((ss+1)->currentMove);
+
         (ss+1)->skipNullMove = false;
         pos.undo_null_move();
 
-        if ((nullValue >= threshold) == !PvNode) // Fail-high std, fail-low null extension
+        if (!PvNode && nullValue >= threshold)
         {
             // Do not return unproven mate scores
-            if (!PvNode && nullValue >= VALUE_MATE_IN_MAX_PLY)
+            if (nullValue >= VALUE_MATE_IN_MAX_PLY)
                 nullValue = beta;
 
-            if (!PvNode && depth < 12 * ONE_PLY && abs(beta) < VALUE_KNOWN_WIN)
+            if (depth < 12 * ONE_PLY && abs(beta) < VALUE_KNOWN_WIN)
                 return nullValue;
 
             // Do verification search at high depths
@@ -598,15 +603,7 @@ namespace {
             ss->skipNullMove = false;
 
             if (v >= beta)
-            {
-                if (!PvNode)
-                    return nullValue;
-                else
-                    // If a null search fails low and instead a normal search fails
-                    // high then there is some 'tension' in the position and it is
-                    // worth to extend it.
-                    nullExtensionNode = true;
-            }
+                return nullValue;
         }
     }
 
