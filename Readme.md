@@ -61,8 +61,6 @@ You can download some tables:
 https://github.com/vpike/WDL50
 https://github.com/vpike/DTZ50
 
-You can download 
-
 ### Syzygybases
 
 Syzygy TB can be enabled by compilation with SYZYGY=yes.
