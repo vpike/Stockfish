@@ -2,6 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
+  Copyright (C) 2015-2016 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -33,13 +34,22 @@
 ///
 /// -DUSE_POPCNT  | Add runtime support for use of popcnt asm-instruction. Works
 ///               | only in 64-bit mode and requires hardware with popcnt support.
+///
+/// -DUSE_PEXT    | Add runtime support for use of pext asm-instruction. Works
+///               | only in 64-bit mode and requires hardware with pext support.
 
 #include <cassert>
 #include <cctype>
 #include <climits>
+#include <cstdint>
 #include <cstdlib>
 
-#include "platform.h"
+#if defined(_MSC_VER)
+// Disable some silly and noisy warning from MSVC compiler
+#pragma warning(disable: 4127) // Conditional expression is constant
+#pragma warning(disable: 4146) // Unary minus operator applied to unsigned type
+#pragma warning(disable: 4800) // Forcing value to bool 'true' or 'false'
+#endif
 
 /// Predefined macros hell:
 ///
@@ -49,14 +59,13 @@
 /// _WIN32             Building on Windows (any)
 /// _WIN64             Building on Windows 64 bit
 
-#if defined(_WIN64) && !defined(IS_64BIT) // Last condition means Makefile is not used
-#  include <intrin.h> // MSVC popcnt and bsfq instrinsics
+#if defined(_WIN64) && defined(_MSC_VER) // No Makefile used
+#  include <intrin.h> // Microsoft header for _BitScanForward64()
 #  define IS_64BIT
-#  define USE_BSFQ
 #endif
 
-#if defined(USE_POPCNT) && defined(__INTEL_COMPILER) && defined(_MSC_VER)
-#  include <nmmintrin.h> // Intel header for _mm_popcnt_u64() intrinsic
+#if defined(USE_POPCNT) && (defined(__INTEL_COMPILER) || defined(_MSC_VER))
+#  include <nmmintrin.h> // Intel and Microsoft header for _mm_popcnt_u64()
 #endif
 
 #if !defined(NO_PREFETCH) && (defined(__INTEL_COMPILER) || defined(_MSC_VER))
@@ -68,14 +77,6 @@
 #  define pext(b, m) _pext_u64(b, m)
 #else
 #  define pext(b, m) (0)
-#endif
-
-#ifdef _MSC_VER
-#  define FORCE_INLINE  __forceinline
-#elif defined(__GNUC__)
-#  define FORCE_INLINE  inline __attribute__((always_inline))
-#else
-#  define FORCE_INLINE  inline
 #endif
 
 #ifdef USE_POPCNT
@@ -176,7 +177,7 @@ enum Bound {
   BOUND_EXACT = BOUND_UPPER | BOUND_LOWER
 };
 
-enum Value {
+enum Value : int {
   VALUE_ZERO      = 0,
   VALUE_DRAW      = 0,
   VALUE_KNOWN_WIN = 10000,
@@ -187,14 +188,11 @@ enum Value {
   VALUE_MATE_IN_MAX_PLY  =  VALUE_MATE - 2 * MAX_PLY,
   VALUE_MATED_IN_MAX_PLY = -VALUE_MATE + 2 * MAX_PLY,
 
-  VALUE_ENSURE_INTEGER_SIZE_P = INT_MAX,
-  VALUE_ENSURE_INTEGER_SIZE_N = INT_MIN,
-
   PawnValueMg   = 198,   PawnValueEg   = 258,
-  KnightValueMg = 817,   KnightValueEg = 846,
-  BishopValueMg = 836,   BishopValueEg = 857,
-  RookValueMg   = 1270,  RookValueEg   = 1278,
-  QueenValueMg  = 2521,  QueenValueEg  = 2558,
+  KnightValueMg = 817,   KnightValueEg = 896,
+  BishopValueMg = 836,   BishopValueEg = 907,
+  RookValueMg   = 1270,  RookValueEg   = 1356,
+  QueenValueMg  = 2521,  QueenValueEg  = 2658,
 
   MidgameLimit  = 15581, EndgameLimit  = 3998
 };
@@ -260,16 +258,10 @@ enum Rank {
 };
 
 
-/// Score enum stores a middlegame and an endgame value in a single integer.
-/// The least significant 16 bits are used to store the endgame value and
-/// the upper 16 bits are used to store the middlegame value. The compiler
-/// is free to choose the enum type as long as it can store the data, so we
-/// ensure that Score is an integer type by assigning some big int values.
-enum Score {
-  SCORE_ZERO,
-  SCORE_ENSURE_INTEGER_SIZE_P = INT_MAX,
-  SCORE_ENSURE_INTEGER_SIZE_N = INT_MIN
-};
+/// Score enum stores a middlegame and an endgame value in a single integer
+/// (enum). The least significant 16 bits are used to store the endgame value
+/// and the upper 16 bits are used to store the middlegame value.
+enum Score : int { SCORE_ZERO };
 
 inline Score make_score(int mg, int eg) {
   return Score((mg << 16) + eg);
@@ -367,7 +359,7 @@ inline Piece make_piece(Color c, PieceType pt) {
   return Piece((c << 3) | pt);
 }
 
-inline PieceType type_of(Piece pc)  {
+inline PieceType type_of(Piece pc) {
   return PieceType(pc & 7);
 }
 
@@ -422,7 +414,7 @@ inline MoveType type_of(Move m) {
 }
 
 inline PieceType promotion_type(Move m) {
-  return PieceType(((m >> 12) & 3) + 2);
+  return PieceType(((m >> 12) & 3) + KNIGHT);
 }
 
 inline Move make_move(Square from, Square to) {

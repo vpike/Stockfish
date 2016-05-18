@@ -2,6 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
+  Copyright (C) 2015-2016 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -32,7 +33,7 @@
 #endif
 
 #ifdef LOMONOSOV_TB
-#include "lmtb.h"
+#include "lomonosov_probe.h"
 #endif
 
 int main(int argc, char* argv[]) {
@@ -40,6 +41,7 @@ int main(int argc, char* argv[]) {
   std::cout << engine_info() << std::endl;
 
   UCI::init(Options);
+  PSQT::init();
   Bitboards::init();
   Position::init();
   Bitbases::init();
@@ -55,18 +57,12 @@ int main(int argc, char* argv[]) {
 
 #ifdef LOMONOSOV_TB
   //init Lomonosov TB
-  int load_dll = -1;
-  if ((load_dll = load_lomonosov_tb()) == 0) {
-	  Search::lomonosov_tb_loaded = true;
-	  std::cout << "Lomonosov tables loaded" << std::endl;
-  }
-  else {
-	  Search::lomonosov_tb_loaded = false;
-	  std::cout << "Lomonosov tables not loaded" << std::endl;
-  }
+  int result = lomonosov_change_server_mode(Options["Lomonosov Server Mode"], Options["Lomonosov Server Console"]);
+  sync_cout << "Lomonosov tables are" << (result == -1 ? " not" : "") << " loaded" << sync_endl;
 #endif
 
   UCI::loop(argc, argv);
 
   Threads.exit();
+  return 0;
 }

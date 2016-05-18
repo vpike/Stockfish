@@ -1,7 +1,5 @@
 #include "lmtb.h"
 
-HMODULE hLib;
-
 const char * proc_names[] = {
 	"dll_add_table_path",
 	"dll_set_table_path",
@@ -19,7 +17,9 @@ const char * proc_names[] = {
 	"dll_probe_fen_dtmz50",
 	"dll_probe_position",
 	"dll_probe_position_with_order",
-	"dll_probe_position_dtmz50"
+	"dll_probe_position_dtmz50",
+	"dll_set_threads_count",
+	"dll_connect_to_server"
 #ifndef TB_DLL_EXPORT
 	,"dll_get_number_load_from_cache"
 	,"dll_get_number_load_from_file"
@@ -38,6 +38,8 @@ const char * proc_names[] = {
 	,"dll_get_line_bounded_fen"
 #endif
 };
+
+HMODULE hLib = NULL, hLibServer = NULL;
 
 add_table_path tb_add_table_path;
 add_table_path tb_set_table_path;
@@ -74,8 +76,13 @@ get_tree_fen tb_get_line_fen;
 get_line_bounded_fen tb_get_line_bounded_fen;
 #endif
 
-int load_lomonosov_tb(void)
-{
+set_cache_size tb_set_threads_count;
+probe_fen_server tb_probe_fen_server;
+probe_fen_with_order_server tb_probe_fen_with_order_server;
+probe_position_server tb_probe_position_server;
+probe_position_with_order_server tb_probe_position_with_order_server;
+
+int load_lomonosov_tb(void) {
 	hLib = LoadLibrary(TEXT("lomonosov_tb.dll"));
 	if (!hLib) return -1;
 	(FARPROC &)tb_add_table_path = GetProcAddress(hLib, proc_names[FUNC_ADD_TABLE_PATH]);
@@ -149,5 +156,60 @@ int load_lomonosov_tb(void)
 
 void unload_lomonosov_tb()
 {
-	if (hLib) FreeLibrary(hLib);
+	if (hLib) {
+		FreeLibrary(hLib);
+		hLib = NULL;
+	}
+}
+
+int load_lmtb_server(bool console)
+{
+	hLibServer = LoadLibrary(TEXT("lmtb_server.dll"));
+	if (!hLibServer) return -1;
+	(FARPROC &)tb_set_threads_count = GetProcAddress(hLibServer, proc_names[FUNC_SET_THREADS_COUNT]);
+	if (!tb_set_threads_count) return -1;
+	(FARPROC &)tb_add_table_path = GetProcAddress(hLibServer, proc_names[FUNC_ADD_TABLE_PATH]);
+	if (!tb_add_table_path) return -1;
+	(FARPROC &)tb_set_cache_size = GetProcAddress(hLibServer, proc_names[FUNC_SET_CACHE_SIZE]);
+	if (!tb_set_cache_size) return -1;
+	(FARPROC &)tb_clear_cache_all = GetProcAddress(hLibServer, proc_names[FUNC_CLEAR_CACHE_ALL]);
+	if (!tb_clear_cache_all) return -1;
+	(FARPROC &)tb_set_table_order = GetProcAddress(hLibServer, proc_names[FUNC_SET_TABLE_ORDER]);
+	if (!tb_set_table_order) return -1;
+	(FARPROC &)tb_get_table_order = GetProcAddress(hLibServer, proc_names[FUNC_GET_TABLE_ORDER]);
+	if (!tb_get_table_order) return -1;
+	(FARPROC &)tb_get_max_pieces_count = GetProcAddress(hLibServer, proc_names[FUNC_GET_MAX_PIECES_COUNT]);
+	if (!tb_get_max_pieces_count) return -1;
+	(FARPROC &)tb_get_max_pieces_count_with_order = GetProcAddress(hLibServer, proc_names[FUNC_GET_MAX_PIECES_COUNT_ORDER]);
+	if (!tb_get_max_pieces_count_with_order) return -1;
+	(FARPROC &)tb_probe_fen_server = GetProcAddress(hLibServer, proc_names[FUNC_PROBE_FEN]);
+	if (!tb_probe_fen_server) return -1;
+	(FARPROC &)tb_probe_fen_with_order_server = GetProcAddress(hLibServer, proc_names[FUNC_PROBE_FEN_WITH_ORDER]);
+	if (!tb_probe_fen_with_order_server) return -1;
+	(FARPROC &)tb_probe_position_server = GetProcAddress(hLibServer, proc_names[FUNC_PROBE_POSITION]);
+	if (!tb_probe_position_server) return -1;
+	(FARPROC &)tb_probe_position_with_order_server = GetProcAddress(hLibServer, proc_names[FUNC_PROBE_POSITION_WITH_ORDER]);
+	if (!tb_probe_position_with_order_server) return -1;
+#ifndef TB_DLL_EXPORT
+	(FARPROC &)tb_set_logging = GetProcAddress(hLibServer, proc_names[FUNC_SET_LOGGING]);
+	if (!tb_set_logging) return -1;
+	(FARPROC &)tb_print_statistics = GetProcAddress(hLibServer, proc_names[FUNC_PRINT_STATISTICS]);
+	if (!tb_print_statistics) return -1;
+#endif
+
+	clear_cache connect_to_server;
+	(FARPROC &)connect_to_server = GetProcAddress(hLibServer, proc_names[FUNC_CONNECT_TO_SERVER]);
+	if (!connect_to_server)
+		return -1;
+	connect_to_server(console);
+
+	return 0;
+}
+
+void unload_lmtb_server()
+{
+	if (hLibServer) {
+		FreeLibrary(hLibServer);
+		hLibServer = NULL;
+	}
 }
