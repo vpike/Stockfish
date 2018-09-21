@@ -2,7 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
-  Copyright (C) 2015-2016 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
+  Copyright (C) 2015-2018 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ TranspositionTable TT; // Our global transposition table
 
 void TranspositionTable::resize(size_t mbSize) {
 
-  size_t newClusterCount = size_t(1) << msb((mbSize * 1024 * 1024) / sizeof(Cluster));
+  size_t newClusterCount = mbSize * 1024 * 1024 / sizeof(Cluster);
 
   if (newClusterCount == clusterCount)
       return;
@@ -41,7 +41,7 @@ void TranspositionTable::resize(size_t mbSize) {
   clusterCount = newClusterCount;
 
   free(mem);
-  mem = calloc(clusterCount * sizeof(Cluster) + CacheLineSize - 1, 1);
+  mem = malloc(clusterCount * sizeof(Cluster) + CacheLineSize - 1);
 
   if (!mem)
   {
@@ -51,6 +51,7 @@ void TranspositionTable::resize(size_t mbSize) {
   }
 
   table = (Cluster*)((uintptr_t(mem) + CacheLineSize - 1) & ~(CacheLineSize - 1));
+  clear();
 }
 
 
@@ -92,19 +93,19 @@ TTEntry* TranspositionTable::probe(const Key key, bool& found) const {
       // nature we add 259 (256 is the modulus plus 3 to keep the lowest
       // two bound bits from affecting the result) to calculate the entry
       // age correctly even after generation8 overflows into the next cycle.
-      if (  replace->depth8 - ((259 + generation8 - replace->genBound8) & 0xFC) * 2 * ONE_PLY
-          >   tte[i].depth8 - ((259 + generation8 -   tte[i].genBound8) & 0xFC) * 2 * ONE_PLY)
+      if (  replace->depth8 - ((259 + generation8 - replace->genBound8) & 0xFC) * 2
+          >   tte[i].depth8 - ((259 + generation8 -   tte[i].genBound8) & 0xFC) * 2)
           replace = &tte[i];
 
   return found = false, replace;
 }
 
 
-/// Returns an approximation of the hashtable occupation during a search. The
-/// hash is x permill full, as per UCI protocol.
+/// TranspositionTable::hashfull() returns an approximation of the hashtable
+/// occupation during a search. The hash is x permill full, as per UCI protocol.
 
-int TranspositionTable::hashfull() const
-{
+int TranspositionTable::hashfull() const {
+
   int cnt = 0;
   for (int i = 0; i < 1000 / ClusterSize; i++)
   {

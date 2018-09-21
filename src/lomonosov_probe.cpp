@@ -2,7 +2,6 @@
 #include "lomonosov_probe.h"
 #include "position.h"
 #include "search.h"
-#include "bitcount.h"
 #include "movegen.h"
 #include "lmtb.h"
 
@@ -39,7 +38,7 @@ inline int position_sign(int value) {
 	return 0;
 }
 
-bool lomonosov_tbprobe(Position& pos, int ss_ply, int *value, bool ce_value, int thread_idx, bool *from_dtm) {
+bool lomonosov_tbprobe(Position& pos, int ss_ply, int *value, bool ce_value, int thread_idx, bool *from_dtm, int *wdl) {
 	if (!lomonosov_loaded)
 		return false;
 	*value = VALUE_DRAW;
@@ -63,6 +62,8 @@ bool lomonosov_tbprobe(Position& pos, int ss_ply, int *value, bool ce_value, int
 	}
 	if (success == 0) {
 		int sign = position_sign(eval);
+        if (wdl)
+            *wdl = sign;
 		*value = (ce_value ? (sign * (VALUE_MATE - dtm - ss_ply))
 			: (sign * (dtm + ss_ply)));
 		return true;
@@ -79,14 +80,13 @@ bool lomonosov_root_probe(Position& pos, Search::RootMoves& rootMoves, bool *fro
 	if (!lomonosov_tbprobe(pos, 0, &value, false, 0)) return false;
 
 	StateInfo st;
-	CheckInfo ci(pos);
 	bool success = false;
 	bool from_dtm_moves = true;
 
 	// Probe each move.
 	for (size_t i = 0; i < rootMoves.size(); i++) {
 		Move move = rootMoves[i].pv[0];
-		pos.do_move(move, st, pos.gives_check(move, ci));
+		pos.do_move(move, st);
 		int v = 0;
 		bool from_dtm_cur = false;
 		success = lomonosov_tbprobe(pos, 1, &v, false, 0, &from_dtm_cur);
